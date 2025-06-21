@@ -32,3 +32,18 @@
 # Envs etc.
 .ruby-version
 .envrc
+
+.env
+postgres_password.txt
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+.vscode/

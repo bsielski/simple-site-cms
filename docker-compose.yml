@@ -1,0 +1,87 @@
+services:
+  # Nazwa usługi dla aplikacji Rails
+  rails:
+    # Twoja preferowana nazwa kontenera
+    container_name: sscms_rails
+    build:
+      context: . # Budujemy z bieżącego katalogu
+      args:
+        # Przekazujemy UID/GID Twojego użytkownika z WSL, aby uniknąć problemów z uprawnieniami
+        # Możesz je ustawić w .env lub zostawić domyślne z Dockerfile
+        USER_ID: ${UID:-1001}
+        GROUP_ID: ${GID:-1001}
+    depends_on:
+      postgresql:
+        condition: service_healthy # Czekaj, aż baza będzie zdrowa
+    networks:
+      - webproxy
+      - default
+    environment:
+      # Usuwamy IS_API, bo jest już w Dockerfile
+      - RAILS_ENV=production
+      - RAILS_SERVE_STATIC_FILES=true # Z Twojego .env
+      - RAILS_MAX_THREADS=${RAILS_MAX_THREADS}
+      - SECRET_KEY_BASE=${SECRET_KEY_BASE}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
+      - POSTGRES_HOST=postgresql # Nazwa usługi bazy danych
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_DEVELOPMENT=${POSTGRES_DEVELOPMENT}
+      - POSTGRES_TEST=${POSTGRES_TEST}
+      - POSTGRES_PRODUCTION=${POSTGRES_PRODUCTION}
+    secrets:
+      - postgres_password
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sscms.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.sscms.entrypoints=websecure"
+      - "traefik.http.routers.sscms.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-myresolver}"
+      - "traefik.http.services.sscms.loadbalancer.server.port=3000" # Port serwera Rails
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Nowa, dedykowana usługa bazy danych
+  postgresql:
+    image: postgres:15-alpine # Nowsza, wspierana wersja
+    container_name: sscms_postgresql # Twoja preferowana nazwa
+    volumes:
+      # Twój preferowany, jawnie nazwany wolumen
+      - sscms_postgresql_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=${POSTGRES_PRODUCTION}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    networks:
+      - default
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_PRODUCTION}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+secrets:
+  postgres_password:
+    file: ./postgres_password.txt
+
+networks:
+  webproxy:
+    external: true
+  default:
+    driver: bridge
+
+volumes:
+  # Definicja Twojego jawnie nazwanego wolumenu
+  sscms_postgresql_data:
+    name: sscms_postgresql_data
