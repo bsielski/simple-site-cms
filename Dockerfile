@@ -19,11 +19,18 @@ COPY Gemfile Gemfile.lock ./
 RUN chown -R app:app .
 
 USER app
+
+RUN gem install bundler:1.17.1
+
 # Używamy konfiguracji Bundlera do pominięcia grup i ustawienia ścieżki
 RUN bundle config set --local without 'development:test' && \
-    bundle config set --local path 'vendor/bundle' && \
     bundle update --bundler && \
     bundle install --jobs $(nproc)
+
+
+# KROK WERYFIKACYJNY: Zobaczmy, co jest w domyślnej ścieżce gemów
+RUN echo "Zawartość /usr/local/bundle po bundle install:" && ls -la /usr/local/bundle
+RUN echo "Zawartość /home/app po bundle install:" && ls -la /home/app
 
 # Kopiujemy resztę aplikacji (już jako użytkownik app)
 COPY --chown=app:app . .
@@ -34,31 +41,32 @@ RUN bundle exec rails assets:precompile
 # --- Etap 2: Finalny Obraz (Runner) ---
 FROM ruby:2.7.2-alpine3.13
 
-# Argumenty potrzebne w finalnym obrazie
 ARG USER_ID=${UID:-1001}
 ARG GROUP_ID=${GID:-1001}
-ARG IS_API=0 # Z Twojego .env
+ARG IS_API=0
 
-# Instalujemy tylko te pakiety, które są niezbędne do uruchomienia aplikacji
 RUN apk add --no-cache postgresql-libs tzdata nodejs
 
-# Tworzymy użytkownika (musi mieć to samo ID co w builderze)
 RUN addgroup -g $GROUP_ID -S app && adduser -u $USER_ID -S app -G app
 WORKDIR /home/app
 
-# Ustawiamy zmienne środowiskowe
 ENV RAILS_ENV=production \
     IS_API=$IS_API \
-    RAILS_SERVE_STATIC_FILES=true \
-    # Dodajemy ścieżkę do gemów, bo są w vendor/bundle
-    BUNDLE_PATH=/home/app/vendor/bundle
+    RAILS_SERVE_STATIC_FILES=true
 
-# Kopiujemy zainstalowane gemy, skompilowane assety i kod aplikacji z etapu "builder"
-COPY --from=builder --chown=app:app /home/app/vendor/bundle ./vendor/bundle
-COPY --from=builder --chown=app:app /home/app/public/assets ./public/assets
+# 1. Kopiujemy kod aplikacji (bez gemów, bez assetów, bez .bundle na razie)
 COPY --from=builder --chown=app:app /home/app .
 
-# Kopiujemy i ustawiamy uprawnienia dla entrypointa
+# 2. Kopiujemy zainstalowane gemy
+COPY --from=builder --chown=app:app /usr/local/bundle /usr/local/bundle
+
+# 3. Kopiujemy konfigurację Bundlera (nadpisze ewentualny pusty .bundle z kroku 1)
+COPY --from=builder --chown=app:app /home/app/.bundle /home/app/.bundle
+
+# 4. Kopiujemy skompilowane assety (nadpisze ewentualne puste public/assets z kroku 1)
+COPY --from=builder --chown=app:app /home/app/public/assets ./public/assets
+
+# 5. Kopiujemy entrypoint osobno
 COPY entrypoint.sh .
 RUN chmod u+x entrypoint.sh
 
