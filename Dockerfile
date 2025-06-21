@@ -22,6 +22,7 @@ USER app
 # Używamy konfiguracji Bundlera do pominięcia grup i ustawienia ścieżki
 RUN bundle config set --local without 'development:test' && \
     bundle config set --local path 'vendor/bundle' && \
+    bundle update --bundler && \
     bundle install --jobs $(nproc)
 
 # Kopiujemy resztę aplikacji (już jako użytkownik app)
