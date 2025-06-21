@@ -4,7 +4,7 @@ default: &default
   host:  <%= ENV["POSTGRES_HOST"] %>
   port: <%= ENV["POSTGRES_PORT"] %>
   username: <%= ENV["POSTGRES_USER"] %>
-  password: <%= ENV["POSTGRES_USER_PASSWORD"] %>
+  password: <%= ENV['POSTGRES_PASSWORD_FILE'] ? File.read(ENV['POSTGRES_PASSWORD_FILE']).strip : ENV['POSTGRES_PASSWORD'] %>
   pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
   timeout: 5000
 
